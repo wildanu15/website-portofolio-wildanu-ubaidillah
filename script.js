@@ -131,22 +131,41 @@ window.addEventListener("scroll", function () {
 
 
 /* =========================================
-   CERTIFICATES CAROUSEL SLIDER
+   CERTIFICATES CAROUSEL & FILTER
 ========================================= */
 
-(function initCertificatesCarousel() {
+(function initCertificates() {
     const track = document.getElementById("certTrack");
     const prevBtn = document.getElementById("certPrevBtn");
     const nextBtn = document.getElementById("certNextBtn");
     const pagination = document.getElementById("certPagination");
     const container = document.getElementById("certCarouselContainer");
+    const filterBtns = document.querySelectorAll(".cert-filter-btn");
 
     if (!track || !prevBtn || !nextBtn || !pagination || !container) return;
 
-    const cards = Array.from(track.querySelectorAll(".cert-card"));
-    if (cards.length === 0) return;
+    const allCards = Array.from(track.querySelectorAll(".cert-card"));
+    if (allCards.length === 0) return;
 
     let currentIndex = 0;
+    let currentFilter = "all";
+
+    // Update filter counts dynamically
+    const countAllEl = document.getElementById("countAll");
+    const countImgEl = document.getElementById("countImg");
+    const countPdfEl = document.getElementById("countPdf");
+
+    if (countAllEl) countAllEl.textContent = allCards.length;
+    if (countImgEl) {
+        countImgEl.textContent = allCards.filter(c => c.getAttribute("data-type") === "image" || c.getAttribute("data-img")).length;
+    }
+    if (countPdfEl) {
+        countPdfEl.textContent = allCards.filter(c => c.getAttribute("data-type") === "pdf" || c.getAttribute("data-pdf")).length;
+    }
+
+    function getVisibleCards() {
+        return allCards.filter(card => !card.classList.contains("hidden"));
+    }
 
     function getVisibleCount() {
         if (window.innerWidth <= 700) return 1;
@@ -155,19 +174,27 @@ window.addEventListener("scroll", function () {
     }
 
     function getMaxIndex() {
-        const visible = getVisibleCount();
-        return Math.max(0, cards.length - visible);
+        const visibleCards = getVisibleCards();
+        const visibleCount = getVisibleCount();
+        return Math.max(0, visibleCards.length - visibleCount);
     }
 
     function updatePagination() {
         pagination.innerHTML = "";
         const maxIdx = getMaxIndex();
-        const totalDots = maxIdx + 1;
+        const visibleCards = getVisibleCards();
 
+        if (visibleCards.length <= getVisibleCount()) {
+            pagination.style.display = "none";
+            return;
+        }
+        pagination.style.display = "flex";
+
+        const totalDots = maxIdx + 1;
         for (let i = 0; i < totalDots; i++) {
             const dot = document.createElement("button");
             dot.className = `cert-dot ${i === currentIndex ? "active" : ""}`;
-            dot.setAttribute("aria-label", `Go to slide ${i + 1}`);
+            dot.setAttribute("aria-label", `Ke sertifikat ${i + 1}`);
             dot.addEventListener("click", () => {
                 goToSlide(i);
             });
@@ -176,7 +203,9 @@ window.addEventListener("scroll", function () {
     }
 
     function updateCarousel() {
+        const visibleCards = getVisibleCards();
         const maxIdx = getMaxIndex();
+
         if (currentIndex > maxIdx) {
             currentIndex = maxIdx;
         }
@@ -184,7 +213,15 @@ window.addEventListener("scroll", function () {
             currentIndex = 0;
         }
 
-        const cardWidth = cards[0].offsetWidth;
+        if (visibleCards.length === 0) {
+            track.style.transform = `translateX(0px)`;
+            prevBtn.disabled = true;
+            nextBtn.disabled = true;
+            return;
+        }
+
+        const firstCard = visibleCards[0];
+        const cardWidth = firstCard ? firstCard.offsetWidth : 0;
         const gap = 24;
         const offset = currentIndex * (cardWidth + gap);
 
@@ -223,6 +260,40 @@ window.addEventListener("scroll", function () {
             currentIndex++;
             updateCarousel();
         }
+    });
+
+    // Filter Button Clicks
+    filterBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+            filterBtns.forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            currentFilter = btn.getAttribute("data-filter") || "all";
+
+            allCards.forEach(card => {
+                const type = card.getAttribute("data-type") || "image";
+                const hasPdf = !!card.getAttribute("data-pdf");
+                const hasImg = !!card.getAttribute("data-img");
+
+                let matches = false;
+                if (currentFilter === "all") {
+                    matches = true;
+                } else if (currentFilter === "image") {
+                    matches = type === "image" || hasImg;
+                } else if (currentFilter === "pdf") {
+                    matches = type === "pdf" || hasPdf;
+                }
+
+                if (matches) {
+                    card.classList.remove("hidden");
+                } else {
+                    card.classList.add("hidden");
+                }
+            });
+
+            currentIndex = 0;
+            updatePagination();
+            updateCarousel();
+        });
     });
 
     // Touch & Swipe Support
@@ -279,27 +350,108 @@ window.addEventListener("scroll", function () {
 
 
 /* =========================================
-   CERTIFICATES MODAL / LIGHTBOX
+   CERTIFICATES MODAL (IMAGE & PDF VIEWER)
 ========================================= */
 
 (function initCertificatesModal() {
     const modal = document.getElementById("certModal");
     const modalBackdrop = document.getElementById("certModalBackdrop");
     const modalClose = document.getElementById("certModalClose");
+
+    const modalTabs = document.getElementById("certModalTabs");
+    const tabImgBtn = document.getElementById("certTabImgBtn");
+    const tabPdfBtn = document.getElementById("certTabPdfBtn");
+
+    const imgBox = document.getElementById("certModalImgBox");
+    const pdfBox = document.getElementById("certModalPdfBox");
     const modalImg = document.getElementById("certModalImg");
+    const modalPdf = document.getElementById("certModalPdf");
+
+    const modalBadge = document.getElementById("certModalBadge");
     const modalTitle = document.getElementById("certModalTitle");
     const modalIssuer = document.getElementById("certModalIssuer");
-    const modalDownload = document.getElementById("certModalDownload");
 
-    if (!modal || !modalImg || !modalTitle) return;
+    const openBtn = document.getElementById("certModalOpenNewTab");
+    const openText = document.getElementById("certModalOpenText");
+    const downloadBtn = document.getElementById("certModalDownload");
+    const downloadText = document.getElementById("certModalDownloadText");
 
-    function openModal(title, issuer, imgSrc) {
-        modalImg.src = imgSrc;
-        modalTitle.textContent = title || "Sertifikat";
-        modalIssuer.textContent = issuer || "";
-        if (modalDownload) {
-            modalDownload.href = imgSrc;
+    if (!modal || !modalTitle) return;
+
+    let currentCardData = null;
+
+    function setViewMode(mode) {
+        if (mode === "pdf") {
+            if (imgBox) imgBox.style.display = "none";
+            if (pdfBox) pdfBox.style.display = "flex";
+            if (tabPdfBtn) tabPdfBtn.classList.add("active");
+            if (tabImgBtn) tabImgBtn.classList.remove("active");
+
+            if (modalPdf && currentCardData && currentCardData.pdf) {
+                modalPdf.src = currentCardData.pdf;
+            }
+
+            if (modalBadge) {
+                modalBadge.textContent = "DOKUMEN RESMI (PDF)";
+                modalBadge.classList.add("badge-pdf");
+            }
+
+            if (openBtn && currentCardData && currentCardData.pdf) {
+                openBtn.href = currentCardData.pdf;
+                if (openText) openText.textContent = "Buka PDF di Tab Baru";
+            }
+            if (downloadBtn && currentCardData && currentCardData.pdf) {
+                downloadBtn.href = currentCardData.pdf;
+                if (downloadText) downloadText.textContent = "Unduh Dokumen PDF";
+            }
+        } else {
+            if (imgBox) imgBox.style.display = "flex";
+            if (pdfBox) pdfBox.style.display = "none";
+            if (tabImgBtn) tabImgBtn.classList.add("active");
+            if (tabPdfBtn) tabPdfBtn.classList.remove("active");
+
+            if (modalImg && currentCardData && currentCardData.img) {
+                modalImg.src = currentCardData.img;
+            }
+
+            if (modalBadge) {
+                modalBadge.textContent = "GAMBAR SERTIFIKAT";
+                modalBadge.classList.remove("badge-pdf");
+            }
+
+            if (openBtn && currentCardData && currentCardData.img) {
+                openBtn.href = currentCardData.img;
+                if (openText) openText.textContent = "Buka Gambar Penuh";
+            }
+            if (downloadBtn && currentCardData && currentCardData.img) {
+                downloadBtn.href = currentCardData.img;
+                if (downloadText) downloadText.textContent = "Unduh Gambar";
+            }
         }
+    }
+
+    function openModal(data) {
+        currentCardData = data;
+        modalTitle.textContent = data.title || "Sertifikat";
+        modalIssuer.textContent = data.issuer || "";
+
+        const hasImg = !!data.img;
+        const hasPdf = !!data.pdf;
+
+        // Determine if tabs are needed
+        if (hasImg && hasPdf) {
+            if (modalTabs) modalTabs.style.display = "inline-flex";
+            // default to image unless specified
+            setViewMode(data.type === "pdf" ? "pdf" : "image");
+        } else {
+            if (modalTabs) modalTabs.style.display = "none";
+            if (hasPdf || data.type === "pdf") {
+                setViewMode("pdf");
+            } else {
+                setViewMode("image");
+            }
+        }
+
         modal.classList.add("active");
         modal.setAttribute("aria-hidden", "false");
         document.body.style.overflow = "hidden";
@@ -309,16 +461,30 @@ window.addEventListener("scroll", function () {
         modal.classList.remove("active");
         modal.setAttribute("aria-hidden", "true");
         document.body.style.overflow = "";
+
+        // Reset iframe src to unload PDF
+        if (modalPdf) modalPdf.src = "";
     }
 
-    // Attach click to cards
+    // Modal tabs listeners
+    if (tabImgBtn) {
+        tabImgBtn.addEventListener("click", () => setViewMode("image"));
+    }
+    if (tabPdfBtn) {
+        tabPdfBtn.addEventListener("click", () => setViewMode("pdf"));
+    }
+
+    // Attach click event to all certificate cards
     const cards = document.querySelectorAll(".cert-card");
     cards.forEach((card) => {
         card.addEventListener("click", () => {
             const title = card.getAttribute("data-title");
             const issuer = card.getAttribute("data-issuer");
             const img = card.getAttribute("data-img");
-            openModal(title, issuer, img);
+            const pdf = card.getAttribute("data-pdf");
+            const type = card.getAttribute("data-type") || (pdf ? "pdf" : "image");
+
+            openModal({ title, issuer, img, pdf, type });
         });
     });
 
