@@ -43,7 +43,7 @@ year.textContent = new Date().getFullYear();
 ========================================= */
 
 const revealElements = document.querySelectorAll(
-    ".section-heading, .skill-card, .project-card, .achievement-card, .timeline-item, .about-text, .about-card, .education-card, .contact-box, .certificates-header, .cert-card"
+    ".section-heading, .skill-card, .project-card, .achievement-card, .timeline-item, .about-text, .about-card, .education-card, .contact-box, .certificates-header, .cert-card, .editorial-article-card"
 );
 
 revealElements.forEach(function (element) {
@@ -502,3 +502,41 @@ window.addEventListener("scroll", function () {
         }
     });
 })();
+
+
+/* =========================================
+   EXPERIENCE SECTION TAB SWITCHER
+========================================= */
+(function initExperienceTabs() {
+    const tabBtns = document.querySelectorAll(".exp-tab-btn");
+    const tabPanes = {
+        articles: document.getElementById("pane-articles"),
+        work: document.getElementById("pane-work"),
+        org: document.getElementById("pane-org")
+    };
+
+    if (!tabBtns.length || !tabPanes.articles) return;
+
+    tabBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const selectedTab = btn.getAttribute("data-tab");
+
+            // Update active button state
+            tabBtns.forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+
+            // Switch content panes
+            if (selectedTab === "all") {
+                Object.values(tabPanes).forEach((pane) => {
+                    if (pane) pane.style.display = "block";
+                });
+            } else {
+                Object.entries(tabPanes).forEach(([key, pane]) => {
+                    if (pane) {
+                        pane.style.display = key === selectedTab ? "block" : "none";
+                    }
+                });
+            }
+        });
+    });
+})();
